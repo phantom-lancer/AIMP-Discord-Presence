@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using AIMP_Discord_Presence_2.Services;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 
 namespace AIMP_Discord_Presence_2.Config
@@ -27,10 +28,18 @@ namespace AIMP_Discord_Presence_2.Config
 		// Static Website
 		public string staticWebsiteUrlFormat;
 
+		// Embedded cover (taken from the track file itself)
+		public string embeddedUploadEndpoint;
+		public string embeddedUploadExpiry;
+		public int embeddedMaxDimension;
+		public int embeddedMinDimension;
+		public bool embeddedInternetFallback;
+		public string embeddedFallbackUserAgent;
+
 		public void LoadDefaults()
 		{
 			discordApplicationId = "429559336982020107";
-			albumArtProvider = EAlbumArtProvider.MusicBrainz;
+			albumArtProvider = EAlbumArtProvider.Embedded;
 			updateFrequency = 5.0;
 			addPresenceButtons = true;
 			displaySmallLogo = true;
@@ -45,6 +54,13 @@ namespace AIMP_Discord_Presence_2.Config
 			musicBrainzUserAgent = "";
 
 			staticWebsiteUrlFormat = "";
+
+			embeddedUploadEndpoint = EmbeddedAlbumArtService.DEFAULT_UPLOAD_ENDPOINT;
+			embeddedUploadExpiry = EmbeddedAlbumArtService.DEFAULT_UPLOAD_EXPIRY;
+			embeddedMaxDimension = 512;
+			embeddedMinDimension = 100;
+			embeddedInternetFallback = true;
+			embeddedFallbackUserAgent = EmbeddedAlbumArtService.DEFAULT_USER_AGENT;
 		}
 
 		public void SanityCheck()
@@ -53,6 +69,25 @@ namespace AIMP_Discord_Presence_2.Config
 			updateFrequency = System.Math.Max(updateFrequency, 1);
 			retryCount = System.Math.Max(retryCount, 1);
 			retryDelayMs = System.Math.Max(retryDelayMs, 100);
+			embeddedMaxDimension = embeddedMaxDimension < 64 ? 512 : System.Math.Min(embeddedMaxDimension, 1024);
+
+			// Covers smaller than that are the 1x1 placeholders mp3 files are usually shipped with.
+			embeddedMinDimension = embeddedMinDimension < 16 ? 100 : System.Math.Min(embeddedMinDimension, 512);
+
+			if (string.IsNullOrWhiteSpace(embeddedFallbackUserAgent))
+			{
+				embeddedFallbackUserAgent = EmbeddedAlbumArtService.DEFAULT_USER_AGENT;
+			}
+
+			if (string.IsNullOrWhiteSpace(embeddedUploadEndpoint))
+			{
+				embeddedUploadEndpoint = EmbeddedAlbumArtService.DEFAULT_UPLOAD_ENDPOINT;
+			}
+
+			if (string.IsNullOrWhiteSpace(embeddedUploadExpiry))
+			{
+				embeddedUploadExpiry = EmbeddedAlbumArtService.DEFAULT_UPLOAD_EXPIRY;
+			}
 		}
 	}
 
@@ -63,5 +98,6 @@ namespace AIMP_Discord_Presence_2.Config
 		Discord = 2,
 		MusicBrainz = 3,
 		StaticWebsite = 4,
+		Embedded = 5,
 	}
 }

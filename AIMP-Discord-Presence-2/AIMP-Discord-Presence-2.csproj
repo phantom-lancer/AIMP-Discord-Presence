@@ -78,6 +78,7 @@
     <Compile Include="RPCPlugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\DiscordAlbumArtService.cs" />
+    <Compile Include="Services\EmbeddedAlbumArtService.cs" />
     <Compile Include="Services\IAlbumArtService.cs" />
     <Compile Include="Services\ImgurAlbumArtService.cs" />
     <Compile Include="Services\MusicBrainzAlbumArtService.cs" />

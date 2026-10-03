@@ -12,7 +12,7 @@ using System.Xml.Serialization;
 
 namespace AIMP_Discord_Presence_2
 {
-	[AimpPlugin("Discord Rich Presence 2", "BowieD", "0.0.2", AimpPluginType = AimpPluginType.Addons)]
+	[AimpPlugin("Discord Rich Presence 2", "BowieD", "0.0.3", AimpPluginType = AimpPluginType.Addons)]
 	public class RPCPlugin : AimpPlugin
 	{
 		public PluginConfiguration Configuration { get; private set; } = new PluginConfiguration();
@@ -87,6 +87,9 @@ namespace AIMP_Discord_Presence_2
 				case EAlbumArtProvider.StaticWebsite:
 					_albumArtService = new StaticWebsiteAlbumArtService(Configuration.staticWebsiteUrlFormat);
 					break;
+				case EAlbumArtProvider.Embedded:
+					_albumArtService = new EmbeddedAlbumArtService(Configuration.embeddedUploadEndpoint, Configuration.embeddedUploadExpiry, Configuration.embeddedMaxDimension, Configuration.embeddedMinDimension, Configuration.embeddedInternetFallback, Configuration.embeddedFallbackUserAgent, Configuration.retryCount, Configuration.retryDelayMs);
+					break;
 				default:
 					_albumArtService = new PlaceholderAlbumArtService();
 					break;
@@ -132,16 +135,27 @@ namespace AIMP_Discord_Presence_2
 
 			return WebUtility.UrlEncode(query);
 		}
+		private static string Clamp(string value, int maxLength)
+		{
+			if (string.IsNullOrWhiteSpace(value))
+				return "";
+
+			value = value.Trim();
+
+			return value.Length > maxLength ? value.Substring(0, maxLength) : value;
+		}
+
 		public void UpdateTrackInfo(IAimpFileInfo aimpFile)
 		{
 			_presence = new RichPresence()
 			{
-				Details = aimpFile.Title.Substring(0, Math.Min(aimpFile.Title.Length, 127)),
-				State = aimpFile.Artist.Substring(0, Math.Min(aimpFile.Artist.Length, 127)),
+				Details = Clamp(aimpFile.Title, 127),
+				State = Clamp(aimpFile.Artist, 127),
 				Assets = new Assets()
 				{
 					LargeImageKey = "aimp_logo",
-					LargeImageText = aimpFile.Album.Substring(0, Math.Min(aimpFile.Album.Length, 127)),
+					// only shows up as a tooltip when hovering the big cover, never in the presence line itself
+					LargeImageText = Clamp(aimpFile.Album, 127),
 				},
 				Timestamps = new Timestamps()
 				{
