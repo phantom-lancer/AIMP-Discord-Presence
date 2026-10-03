@@ -147,15 +147,19 @@ namespace AIMP_Discord_Presence_2
 
 		public void UpdateTrackInfo(IAimpFileInfo aimpFile)
 		{
+			var title = Clamp(aimpFile.Title, 127);
+			var album = Clamp(aimpFile.Album, 127);
+
 			_presence = new RichPresence()
 			{
-				Details = Clamp(aimpFile.Title, 127),
+				Details = title,
 				State = Clamp(aimpFile.Artist, 127),
 				Assets = new Assets()
 				{
 					LargeImageKey = "aimp_logo",
-					// only shows up as a tooltip when hovering the big cover, never in the presence line itself
-					LargeImageText = Clamp(aimpFile.Album, 127),
+					// Discord renders this both as a third line under the state and as the hover text of
+					// the big image, so an album repeating the title is skipped to avoid the duplicate line
+					LargeImageText = album.Equals(title, StringComparison.OrdinalIgnoreCase) ? "" : album,
 				},
 				Timestamps = new Timestamps()
 				{
@@ -167,7 +171,10 @@ namespace AIMP_Discord_Presence_2
 			if (Configuration.displaySmallLogo)
 			{
 				_presence.Assets.SmallImageKey = "aimp_logo";
-				_presence.Assets.SmallImageText = "AIMP";
+
+				// the album is only shown on hover here, the big image text is reserved for the
+				// third line Discord draws under the state
+				_presence.Assets.SmallImageText = album.Length > 0 ? album : "AIMP";
 			}
 
 			var plrSrv = this.Player.ServicePlayer;

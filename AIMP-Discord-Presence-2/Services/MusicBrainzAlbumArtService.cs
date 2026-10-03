@@ -46,6 +46,8 @@ namespace AIMP_Discord_Presence_2.Services
 
 		public MusicBrainzAlbumArtService(string musicBrainzUserAgent)
 		{
+			EmbeddedAlbumArtService.EnsureModernTls();
+
 			_http = new HttpClient();
 			_http.DefaultRequestHeaders.Add("User-Agent", musicBrainzUserAgent);
 		}

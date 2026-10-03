@@ -7,6 +7,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
@@ -47,6 +48,8 @@ namespace AIMP_Discord_Presence_2.Services
 
 		public EmbeddedAlbumArtService(string uploadEndpoint, string uploadExpiry, int maxDimension, int minDimension, bool useInternetFallback, string fallbackUserAgent, int retryCount, int retryDelay)
 		{
+			EnsureModernTls();
+
 			_http = new HttpClient
 			{
 				Timeout = TimeSpan.FromSeconds(30),
@@ -72,7 +75,30 @@ namespace AIMP_Discord_Presence_2.Services
 				Directory.CreateDirectory(dir);
 			}
 
-			_log = new StreamWriter(Path.Combine(dir, "uploads.log"), true, Encoding.UTF8);
+			_log = new StreamWriter(new FileStream(Path.Combine(dir, "uploads.log"), FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+			{
+				AutoFlush = true,
+			};
+		}
+
+		/// <summary>
+		/// AIMP pulls in an old ServicePointManager default (SSL3/TLS1.0), and every https host
+		/// refuses to talk to it, which surfaces as a bare "an error occurred while sending the
+		/// request" from HttpClient.
+		/// </summary>
+		public static void EnsureModernTls()
+		{
+			try
+			{
+				if ((ServicePointManager.SecurityProtocol & SecurityProtocolType.Tls12) == 0)
+				{
+					ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+				}
+			}
+			catch
+			{
+				// nothing we can do about it, the upload will just fail and be logged
+			}
 		}
 
 		private static string ComputeKey(IAimpFileInfo fileInfo)
@@ -170,7 +196,7 @@ namespace AIMP_Discord_Presence_2.Services
 				}
 				catch (Exception ex)
 				{
-					await LogAsync($"[attempt #{i + 1}] could not upload the cover: {ex.Message}");
+					await LogAsync($"[attempt #{i + 1}] could not upload the cover: {ex}");
 
 					await Task.Delay(_retryDelay);
 				}
