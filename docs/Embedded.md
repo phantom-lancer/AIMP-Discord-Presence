@@ -30,9 +30,25 @@
 | `embeddedMinDimension`     | `100`                                                  | меньше этого — заглушка, обложка не ищется                 |
 | `embeddedInternetFallback` | `true`                                                 | нет обложки в файле — искать в MusicBrainz                  |
 | `embeddedFallbackUserAgent`| `AIMP-Discord-Presence-2/0.0.3`                        | User-Agent для запроса к MusicBrainz                        |
+| `coverCacheEnabled`       | `true`                                                 | помнить обложки между запусками AIMP                        |
+| `coverPrefetchEnabled`    | `true`                                                 | заранее грузить обложку следующего трека                    |
 
 Лог каждой загрузки: `%AppData%\BowieD_AIMPDiscordPresence2\EmbeddedProvider\uploads.log`.
 Большой лог — признак того, что endpoint недоступен из вашей сети.
+Лог MusicBrainz-фолбэка: `%AppData%\BowieD_AIMPDiscordPresence2\MusicBrainzProvider\musicbrainz.log`.
+
+## Ничего не тормозит
+
+Провайдер никогда не блокирует вызывающий код:
+
+- `TryGetImageUrl` возвращает только то, что уже готово, а отсутствие обложки запускает
+  загрузку в фоне и возвращает пустую строку;
+- таймаут загрузки — 15 секунд, таймаут MusicBrainz — 6 секунд;
+- после трёх неудач подряд MusicBrainz отключается до конца сессии, чтобы не висеть на
+  каждом треке;
+- трек с неудачной загрузкой не пробуется снова 10 минут;
+- обложки сохраняются в `EmbeddedProvider\cache.json` вместе со сроком жизни ссылки, поэтому
+  после перезапуска AIMP они не загружаются заново, а протухшая ссылка заменяется сама.
 
 ## Обложки в mp3 обычно отсутствуют
 

@@ -11,10 +11,13 @@ namespace AIMP_Discord_Presence_2.Config
 		[JsonConverter(typeof(StringEnumConverter))]
 		public EAlbumArtProvider albumArtProvider;
 		public double updateFrequency;
+		public double statePollInterval;
 		public bool addPresenceButtons;
 		public bool displaySmallLogo;
 		public int retryCount;
 		public int retryDelayMs;
+		public bool coverCacheEnabled;
+		public bool coverPrefetchEnabled;
 
 		// Imgur
 		public string imgurClientId;
@@ -40,11 +43,14 @@ namespace AIMP_Discord_Presence_2.Config
 		{
 			discordApplicationId = "429559336982020107";
 			albumArtProvider = EAlbumArtProvider.Embedded;
-			updateFrequency = 5.0;
+			updateFrequency = 10.0;
+			statePollInterval = 0.3;
 			addPresenceButtons = true;
 			displaySmallLogo = true;
 			retryCount = 5;
 			retryDelayMs = 500;
+			coverCacheEnabled = true;
+			coverPrefetchEnabled = true;
 
 			imgurClientId = "";
 			automaticallyDeleteOnPluginShutdown = true;
@@ -67,6 +73,7 @@ namespace AIMP_Discord_Presence_2.Config
 		{
 			maxCacheCount = System.Math.Max(maxCacheCount, 2);
 			updateFrequency = System.Math.Max(updateFrequency, 1);
+			statePollInterval = statePollInterval < 0.1 ? 0.3 : System.Math.Min(statePollInterval, 5);
 			retryCount = System.Math.Max(retryCount, 1);
 			retryDelayMs = System.Math.Max(retryDelayMs, 100);
 			embeddedMaxDimension = embeddedMaxDimension < 64 ? 512 : System.Math.Min(embeddedMaxDimension, 1024);

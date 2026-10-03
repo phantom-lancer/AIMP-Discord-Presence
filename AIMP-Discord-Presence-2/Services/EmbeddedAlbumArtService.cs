@@ -1,4 +1,5 @@
 using AIMP.SDK.FileManager.Objects;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -19,54 +20,68 @@ namespace AIMP_Discord_Presence_2.Services
 	/// Takes the cover embedded into the track file itself (ID3APIC / FLAC PICTURE / MP4 covr),
 	/// scales it down and uploads it to a plain, key-less HTTP host, because Discord Rich Presence
 	/// is only able to display images that are available by an https URL.
+	/// Nothing here ever blocks the caller: a cover that is not ready yet is simply not returned.
 	/// </summary>
-	public sealed class EmbeddedAlbumArtService : IAlbumArtService
+	public sealed class EmbeddedAlbumArtService : IPrefetchingAlbumArtService
 	{
 		public const string DEFAULT_UPLOAD_ENDPOINT = "https://litterbox.catbox.moe/resources/internals/api.php";
 		public const string DEFAULT_UPLOAD_EXPIRY = "1h";
 		public const string DEFAULT_USER_AGENT = "AIMP-Discord-Presence-2/0.0.3";
 
 		private const int JPEG_QUALITY = 90;
-		private static readonly TimeSpan FAILURE_COOLDOWN = TimeSpan.FromMinutes(5);
+		private const int HTTP_TIMEOUT_SECONDS = 15;
+		private const int MAX_DISK_CACHE_ENTRIES = 500;
+
+		/// <summary>How long a failed track is not retried, so an unreachable host is not hammered.</summary>
+		private static readonly TimeSpan FAILURE_COOLDOWN = TimeSpan.FromMinutes(10);
+
+		public sealed class CacheEntry
+		{
+			[JsonProperty("url")]
+			public string url;
+
+			[JsonProperty("expires")]
+			public DateTime expires;
+		}
 
 		private readonly HttpClient _http;
 		private readonly StreamWriter _log;
+		private readonly string _logPath;
+		private readonly string _cachePath;
 
 		private readonly string _uploadEndpoint;
 		private readonly string _uploadExpiry;
+		private readonly TimeSpan _uploadLifetime;
 		private readonly int _maxDimension;
 		private readonly int _minDimension;
 		private readonly int _retryCount;
 		private readonly int _retryDelay;
-
-		private readonly object _lock = "";
-		private readonly Dictionary<string, string> _cache = new Dictionary<string, string>();
-		private readonly Dictionary<string, DateTime> _cooldowns = new Dictionary<string, DateTime>();
-		private readonly HashSet<string> _inWork = new HashSet<string>();
+		private readonly bool _cacheEnabled;
 
 		private readonly IAlbumArtService _fallback;
+		private readonly object _lock = "";
+		private readonly Dictionary<string, CacheEntry> _cache = new Dictionary<string, CacheEntry>();
+		private readonly HashSet<string> _inWork = new HashSet<string>();
+		private readonly Dictionary<string, DateTime> _failures = new Dictionary<string, DateTime>();
 
-		public EmbeddedAlbumArtService(string uploadEndpoint, string uploadExpiry, int maxDimension, int minDimension, bool useInternetFallback, string fallbackUserAgent, int retryCount, int retryDelay)
+		public EmbeddedAlbumArtService(string uploadEndpoint, string uploadExpiry, int maxDimension, int minDimension, bool useInternetFallback, string fallbackUserAgent, int retryCount, int retryDelay, bool cacheEnabled)
 		{
 			EnsureModernTls();
 
 			_http = new HttpClient
 			{
-				Timeout = TimeSpan.FromSeconds(30),
+				Timeout = TimeSpan.FromSeconds(HTTP_TIMEOUT_SECONDS),
 			};
 			_http.DefaultRequestHeaders.Add("User-Agent", "AIMP-Discord-Presence-2");
 
 			_uploadEndpoint = string.IsNullOrWhiteSpace(uploadEndpoint) ? DEFAULT_UPLOAD_ENDPOINT : uploadEndpoint.Trim();
 			_uploadExpiry = string.IsNullOrWhiteSpace(uploadExpiry) ? DEFAULT_UPLOAD_EXPIRY : uploadExpiry.Trim();
+			_uploadLifetime = ParseLifetime(_uploadExpiry);
 			_maxDimension = maxDimension < 64 ? 512 : maxDimension;
 			_minDimension = minDimension < 16 ? 16 : minDimension;
 			_retryCount = retryCount < 1 ? 1 : retryCount;
 			_retryDelay = retryDelay < 100 ? 500 : retryDelay;
-
-			// Covers are almost never embedded into mp3s, so an internet lookup may be used as a last resort.
-			_fallback = useInternetFallback
-				? new MusicBrainzAlbumArtService(string.IsNullOrWhiteSpace(fallbackUserAgent) ? DEFAULT_USER_AGENT : fallbackUserAgent.Trim())
-				: null;
+			_cacheEnabled = cacheEnabled;
 
 			var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "BowieD_AIMPDiscordPresence2", "EmbeddedProvider");
 
@@ -75,16 +90,28 @@ namespace AIMP_Discord_Presence_2.Services
 				Directory.CreateDirectory(dir);
 			}
 
-			_log = new StreamWriter(new FileStream(Path.Combine(dir, "uploads.log"), FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+			_logPath = Path.Combine(dir, "uploads.log");
+			_cachePath = Path.Combine(dir, "cache.json");
+
+			_log = new StreamWriter(new FileStream(_logPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
 			{
 				AutoFlush = true,
 			};
+
+			// Covers are almost never embedded into mp3s, so an internet lookup may be used as a last resort.
+			_fallback = useInternetFallback
+				? new MusicBrainzAlbumArtService(string.IsNullOrWhiteSpace(fallbackUserAgent) ? DEFAULT_USER_AGENT : fallbackUserAgent.Trim())
+				: null;
+
+			if (_cacheEnabled)
+			{
+				LoadCache();
+			}
 		}
 
 		/// <summary>
-		/// AIMP pulls in an old ServicePointManager default (SSL3/TLS1.0), and every https host
-		/// refuses to talk to it, which surfaces as a bare "an error occurred while sending the
-		/// request" from HttpClient.
+		/// AIMP starts with an outdated ServicePointManager default (SSL3/TLS1.0) and modern https hosts
+		/// refuse to talk to it, which surfaces as a bare "an error occurred while sending the request".
 		/// </summary>
 		public static void EnsureModernTls()
 		{
@@ -101,14 +128,51 @@ namespace AIMP_Discord_Presence_2.Services
 			}
 		}
 
+		private static TimeSpan ParseLifetime(string expiry)
+		{
+			var digits = new string((expiry ?? "").TakeWhile(char.IsDigit).ToArray());
+
+			int hours;
+
+			return int.TryParse(digits, out hours) && hours > 0
+				? TimeSpan.FromHours(hours)
+				: TimeSpan.FromHours(1);
+		}
+
 		private static string ComputeKey(IAimpFileInfo fileInfo)
 		{
+			string modified;
+
+			try
+			{
+				modified = File.Exists(fileInfo.FileName)
+					? File.GetLastWriteTimeUtc(fileInfo.FileName).Ticks.ToString()
+					: "0";
+			}
+			catch
+			{
+				modified = "0";
+			}
+
 			using (var sha1 = SHA1.Create())
 			{
-				var bytes = Encoding.UTF8.GetBytes($"{fileInfo.FileName}|{fileInfo.FileSize}");
+				var bytes = Encoding.UTF8.GetBytes($"{fileInfo.FileName}|{fileInfo.FileSize}|{modified}");
 
 				return string.Join("", sha1.ComputeHash(bytes).Select(d => d.ToString("x2")));
 			}
+		}
+
+		private static bool HasUsableCover(IAimpFileInfo fileInfo, int minDimension)
+		{
+			var art = fileInfo?.AlbumArt;
+
+			// Most mp3 files carry either nothing or a 1x1 placeholder image, treat both as "no cover".
+			return art != null && art.Width >= minDimension && art.Height >= minDimension;
+		}
+
+		private bool IsCoolingDown(string key)
+		{
+			return _failures.TryGetValue(key, out var retryAt) && DateTime.UtcNow < retryAt;
 		}
 
 		public string TryGetImageUrl(IAimpFileInfo fileInfo)
@@ -116,38 +180,64 @@ namespace AIMP_Discord_Presence_2.Services
 			if (fileInfo is null)
 				return "";
 
-			var art = fileInfo.AlbumArt;
+			if (!HasUsableCover(fileInfo, _minDimension))
+				return _fallback?.TryGetImageUrl(fileInfo) ?? "";
 
-			// Most mp3 files carry either nothing or a 1x1 placeholder image, treat both as "no cover".
-			if (art is null ||
-				art.Width < _minDimension ||
-				art.Height < _minDimension)
+			var key = ComputeKey(fileInfo);
+			string cachedUrl = "";
+
+			lock (_lock)
 			{
-				return TryGetFallbackUrl(fileInfo);
+				if (IsCoolingDown(key))
+					return _fallback?.TryGetImageUrl(fileInfo) ?? "";
+
+				if (_cache.TryGetValue(key, out var entry))
+				{
+					cachedUrl = entry.url ?? "";
+
+					// A cached url may have expired already, but it still beats no cover at all:
+					// refresh it in the background and show what we already have meanwhile.
+					if (DateTime.UtcNow < entry.expires)
+						return cachedUrl;
+				}
+
+				if (!_inWork.Add(key))
+					return cachedUrl;
 			}
+
+			StartUpload(key, fileInfo.AlbumArt);
+
+			return cachedUrl;
+		}
+
+		public void Prefetch(IAimpFileInfo fileInfo)
+		{
+			if (fileInfo is null)
+				return;
+
+			if (!HasUsableCover(fileInfo, _minDimension))
+				return;
 
 			var key = ComputeKey(fileInfo);
 
 			lock (_lock)
 			{
-				if (_cooldowns.TryGetValue(key, out var retryAt) && DateTime.UtcNow < retryAt)
-					return TryGetFallbackUrl(fileInfo);
+				if (IsCoolingDown(key))
+					return;
 
-				if (_cache.TryGetValue(key, out var cachedUrl))
-					return cachedUrl;
+				if (_cache.TryGetValue(key, out var entry) && DateTime.UtcNow < entry.expires)
+					return;
 
 				if (!_inWork.Add(key))
-					return "";
+					return;
 			}
 
-			Task.Run(async () => await UploadCoverAsync(key, art));
-
-			return "";
+			StartUpload(key, fileInfo.AlbumArt);
 		}
 
-		private string TryGetFallbackUrl(IAimpFileInfo fileInfo)
+		private void StartUpload(string key, Image source)
 		{
-			return _fallback?.TryGetImageUrl(fileInfo) ?? "";
+			Task.Run(async () => await UploadCoverAsync(key, source));
 		}
 
 		private async Task UploadCoverAsync(string key, Image source)
@@ -196,7 +286,7 @@ namespace AIMP_Discord_Presence_2.Services
 				}
 				catch (Exception ex)
 				{
-					await LogAsync($"[attempt #{i + 1}] could not upload the cover: {ex}");
+					await LogAsync($"[attempt #{i + 1}] could not upload the cover: {ex.Message}");
 
 					await Task.Delay(_retryDelay);
 				}
@@ -208,12 +298,27 @@ namespace AIMP_Discord_Presence_2.Services
 
 				if (string.IsNullOrWhiteSpace(url))
 				{
-					_cooldowns[key] = DateTime.UtcNow.Add(FAILURE_COOLDOWN);
+					// do not hammer a host that is unreachable, try again in a few minutes
+					_failures[key] = DateTime.UtcNow.Add(FAILURE_COOLDOWN);
+
 					return;
 				}
 
-				_cache[key] = url;
+				_failures.Remove(key);
+
+				_cache[key] = new CacheEntry()
+				{
+					url = url,
+					expires = DateTime.UtcNow.Add(_uploadLifetime).AddMinutes(-1),
+				};
+
+				while (_cache.Count > MAX_DISK_CACHE_ENTRIES)
+				{
+					_cache.Remove(_cache.Keys.First());
+				}
 			}
+
+			SaveCache();
 		}
 
 		/// <summary>
@@ -340,6 +445,61 @@ namespace AIMP_Discord_Presence_2.Services
 			}
 		}
 
+		private void LoadCache()
+		{
+			try
+			{
+				if (!File.Exists(_cachePath))
+					return;
+
+				var loaded = JsonConvert.DeserializeObject<Dictionary<string, CacheEntry>>(File.ReadAllText(_cachePath));
+
+				if (loaded is null)
+					return;
+
+				lock (_lock)
+				{
+					foreach (var pair in loaded)
+					{
+						if (!string.IsNullOrWhiteSpace(pair.Value?.url) && pair.Value.expires > DateTime.UtcNow)
+						{
+							_cache[pair.Key] = pair.Value;
+						}
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				LogSync($"could not read the cover cache: {ex.Message}");
+			}
+		}
+
+		private void SaveCache()
+		{
+			if (!_cacheEnabled)
+				return;
+
+			try
+			{
+				Dictionary<string, CacheEntry> snapshot;
+
+				lock (_lock)
+				{
+					snapshot = new Dictionary<string, CacheEntry>(_cache);
+				}
+
+				var tempPath = _cachePath + ".tmp";
+
+				File.WriteAllText(tempPath, JsonConvert.SerializeObject(snapshot));
+				File.Copy(tempPath, _cachePath, true);
+				File.Delete(tempPath);
+			}
+			catch (Exception ex)
+			{
+				LogSync($"could not write the cover cache: {ex.Message}");
+			}
+		}
+
 		private async Task LogAsync(string message)
 		{
 			try
@@ -353,14 +513,29 @@ namespace AIMP_Discord_Presence_2.Services
 			}
 		}
 
+		private void LogSync(string message)
+		{
+			try
+			{
+				_log.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}");
+				_log.Flush();
+			}
+			catch
+			{
+				// logging must never break the playback
+			}
+		}
+
 		public void Dispose()
 		{
-			_cache.Clear();
-			_cooldowns.Clear();
-			_inWork.Clear();
+			SaveCache();
 
-			_http.Dispose();
+			_cache.Clear();
+			_inWork.Clear();
+			_failures.Clear();
+
 			_fallback?.Dispose();
+			_http.Dispose();
 			_log.Dispose();
 		}
 	}
