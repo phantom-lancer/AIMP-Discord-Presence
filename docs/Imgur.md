@@ -1,21 +1,38 @@
-1. Go to [Imgur](https://imgur.com/).
+# Imgur
 
-2. Open profile settings (you will need an Imgur account).
+Обложка из файла загружается на [Imgur](https://imgur.com/) и используется по постоянной
+ссылке. Требуется Client ID.
 
-3. Go to `Applications` tab.
+Настройки в `%AppData%\BowieD_AIMPDiscordPresence2\config.xml`:
 
-4. Create a new application, name it however you want. If asked, set `Authorization callback URL` to `https://imgur.com/`.
+| Параметр                               | Смысл                                                     |
+| -------------------------------------- | --------------------------------------------------------- |
+| `albumArtProvider`                     | `Imgur`, регистр важен                                    |
+| `imgurClientId`                        | Client ID приложения                                      |
+| `automaticallyDeleteOnPluginShutdown`  | удалять загруженное при выходе из AIMP                     |
+| `automaticallyDeleteOnSongSwitch`      | удалять загруженное предыдущего трека при смене            |
+| `maxCacheCount`                        | сколько обложек держать в кэше, минимум 2                 |
 
-5. Grab the newly created client ID, keep it in mind.
+## Как получить Client ID
 
-6. Completely close AIMP, make sure it's not open in tray.
+1. Зайти на [imgur.com](https://imgur.com/) под своим аккаунтом.
+2. Открыть настройки профиля → вкладка **Applications**.
+3. Создать приложение, имя любое. Если спросят `Authorization callback URL` — указать
+   `https://imgur.com/`.
+4. Скопировать полученный **Client ID**.
 
-7. Go to data folder of the plugin (you can use a shortcut in plugin folder, which can be found in `AIMP/Plugins/aimp_DiscordPresence2`).
+## Как включить
 
-8. Open `config.xml` in any text editor.
+1. Полностью закрыть AIMP, включая трей.
+2. Открыть `%AppData%\BowieD_AIMPDiscordPresence2\config.xml` любым текстовым редактором.
+3. Провайдер: `<albumArtProvider>Imgur</albumArtProvider>` — **регистр важен**.
+4. Client ID: заменить `<imgurClientId />` на
+   `<imgurClientId>ВАШ_CLIENT_ID</imgurClientId>`.
+5. Запустить AIMP.
 
-9. Change `albumArtProvider` to Imgur, making it look like this - `<albumArtProvider>Imgur</albumArtProvider>`. **Capitalization matters!**
+## Ограничения
 
-10. Change `<imgurClientId />` to `<imgurClientId>YOUR CLIENT ID</imgurClientId>`, replacing `YOUR CLIENT ID` with our newly obtained ID.
-
-11. Start AIMP, it should be working now.
+- У Imgur есть лимит примерно 1136 запросов в сутки на Client ID; включённые с Images
+  лимиты ниже.
+- Загруженные обложки публичные, и ссылки на них видит любой, кто их знает.
+- Удалённые через `automaticallyDeleteOn*` картинки восстановить нельзя.

@@ -1,11 +1,35 @@
-1. Completely close AIMP, make sure it's not open in tray.
+# MusicBrainz
 
-2. Go to data folder of the plugin (you can use a shortcut in plugin folder, which can be found in `AIMP/Plugins/aimp_DiscordPresence2`).
+Ищет обложку в интернете по названию альбома и артисту через MusicBrainz и
+Cover Art Archive. Обложка в самом файле не нужна.
 
-3. Open `config.xml` in any text editor.
+Настройки в `%AppData%\BowieD_AIMPDiscordPresence2\config.xml`:
 
-4. Change `albumArtProvider` to MusicBrainz, making it look like this - `<albumArtProvider>MusicBrainz</albumArtProvider>`. **Capitalization matters!**
+| Параметр                 | Смысл                                                 |
+| ------------------------ | ----------------------------------------------------- |
+| `albumArtProvider`       | `MusicBrainz`, регистр важен                          |
+| `musicBrainzUserAgent`   | User-Agent, обязателен — без него запросы отклоняются |
 
-5. Change `<musicBrainzUserAgent />` to `<musicBrainzUserAgent>AIMPDiscordRPC/1.0.0 ( YOUR@EMAIL.ADDRESS )</musicBrainzUserAgent>`, replacing `YOUR@EMAIL.ADDRESS` with your email address.
+## Как включить
 
-6. Start AIMP, it should be working now.
+1. Полностью закрыть AIMP, включая трей.
+2. Открыть `%AppData%\BowieD_AIMPDiscordPresence2\config.xml` любым текстовым редактором.
+3. Провайдер: `<albumArtProvider>MusicBrainz</albumArtProvider>` — **регистр важен**.
+4. User-Agent: заменить `<musicBrainzUserAgent />` на
+   `<musicBrainzUserAgent>AIMPDiscordRPC/1.0.0 ( ВАШ@EMAIL )</musicBrainzUserAgent>`.
+5. Запустить AIMP.
+
+## Как это работает
+
+По `Album` и `AlbumArtist` (или `Artist`, если альбом-артист пуст) находится release group,
+затем его релиз на MusicBrainz, потом обложка берётся из Cover Art Archive: сперва
+предпочтётся фронтальная, иначе первая доступная. Результат кэшируется до смены альбома.
+
+## Ограничения
+
+- MusicBrainz жёстко ограничивает запросы без нормального User-Agent и режет запросы без
+  него совсем.
+- Совпадение альбома не гарантировано: одноимённые альбомы, ремиксы и переиздания найдут не
+  то. Для альбомов с одинаковым названием у разных исполнителей картинка будет одна.
+- У провайдеров, которые режят MusicBrainz, провайдер не работает вовсе — в этом случае
+  лучше [Embedded](Embedded.md).

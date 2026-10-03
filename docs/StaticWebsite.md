@@ -1,23 +1,37 @@
-1. Download Album Cover Gatherer.
+# StaticWebsite
 
-2. Run it.
+Обложки лежат на вашем собственном сайте, плагин только собирает ссылку. Свои обложки
+поддерживаются, но на альбом приходится один файл.
 
-3. When prompted with `Directory >>`, input your music directory.
+Настройки в `%AppData%\BowieD_AIMPDiscordPresence2\config.xml`:
 
-4. When prompted with `Output Directory >>`, input some empty directory (or directory with previous output).
+| Параметр                | Смысл                                              |
+| ----------------------- | -------------------------------------------------- |
+| `albumArtProvider`      | `StaticWebsite`, регистр важен                     |
+| `staticWebsiteUrlFormat`| шаблон ссылки, `{0}` — имя файла обложки          |
 
-5. Wait it to finish working.
+## Подготовка обложек
 
-6. Upload those images to your own website into a single folder.
+1. Собрать `AlbumCoverGatherer` (проект в этом репозитории).
+2. Запустить его, указать папку с музыкой на `Directory >>`.
+3. На `Output Directory >>` указать пустую папку.
+4. Дождаться окончания. Имена файлов — SHA1 от названия альбома плюс `.jpg`.
+5. Залить получившиеся картинки в одну папку на своём сайте.
 
-7. Completely close AIMP, make sure it's not open in tray.
+## Как включить
 
-8. Go to data folder of the plugin (you can use a shortcut in plugin folder, which can be found in `AIMP/Plugins/aimp_DiscordPresence2`).
+1. Полностью закрыть AIMP, включая трей.
+2. Открыть `%AppData%\BowieD_AIMPDiscordPresence2\config.xml` любым текстовым редактором.
+3. Провайдер: `<albumArtProvider>StaticWebsite</albumArtProvider>` — **регистр важен**.
+4. Заменить `<staticWebsiteUrlFormat />` на шаблон, например:
+   `<staticWebsiteUrlFormat>https://example.com/albumCovers/{0}</staticWebsiteUrlFormat>`,
+   где `{0}` — имя файла, которое подставит плагин.
+5. Запустить AIMP.
 
-9. Open `config.xml` in any text editor.
+## Ограничения
 
-10. Change `albumArtProvider` to StaticWebsite, making it look like this - `<albumArtProvider>StaticWebsite</albumArtProvider>`. **Capitalization matters!**
-
-19. Change `<staticWebsiteUrlFormat></staticWebsiteUrlFormat>` to `<staticWebsiteUrlFormat>YOUR WEBSITE URL</staticWebsiteUrlFormat>`, replacing `YOUR WEBSITE URL` with your link to the website in a proper format, for instance: `<staticWebsiteUrlFormat>http://example.com/albumCovers/{0}</staticWebsiteUrlFormat>`, where `{0}` is where plugin will input proper name for current album.
-
-20. Start AIMP, it should be working now.
+- Нужен свой сайт с прямой отдачей картинок; страницы-обёртки и «горячие» ссылки без
+  расширения работать не будут.
+- Обложка одна на альбом, а не на трек.
+- Если файла нет, Discord покажет дефолтную иконку AIMP — проверить можно, открыв ссылку
+  из лога вручную.

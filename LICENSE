@@ -1,0 +1,16 @@
+Плагин для AIMP, показывающий текущий трек в Discord Rich Presence.
+
+Форк iBowie/AIMP-Discord-Presence-2: https://github.com/iBowie/AIMP-Discord-Presence-2
+
+Оригинальный проект распространяется без явной лицензии, поэтому авторские права на исходный
+код остаются за его автором. Изменения, добавленные в этом форке, можно свободно использовать
+и распространять.
+
+Заимствованные компоненты и их лицензии:
+- AIMP DotNet SDK (aimp_dotnet.dll, AIMP.SDK.dll) — Apache 2.0, (c) martin211,
+  https://github.com/martin211/aimp_dotnet
+- DiscordRPC.dll — MIT, https://github.com/lunalycos/discord-rpc-csharp
+- Newtonsoft.Json — MIT, https://github.com/JamesNK/Newtonsoft.Json
+- AlbumCoverGatherer использует ImageSharp и TagLib.
+
+Discord, AIMP и DiscordRPC.dll — торговые марки своих владельцев.

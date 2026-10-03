@@ -1,45 +1,56 @@
-# Embedded (cover taken from the track file)
+# Embedded: обложка из файла трека
 
-The default provider of this fork. It takes the cover **embedded into the track file itself**
-(`APIC` in mp3, `PICTURE` in flac, `covr` in m4a), scales it down to
-`embeddedMaxDimension` and uploads it to a plain file host, because Discord Rich Presence
-is only able to display images available by an **https url** (a local path or `file://` will
-never work, no matter what you feed into `LargeImageKey`).
+Провайдер по умолчанию. Берёт обложку, **встроенную в сам аудиофайл**, ужимает её и
+загружает на анонимный хостинг, потому что Discord Rich Presence умеет показывать только
+картинку по публичному https-ссылке. Локальный путь или `file://` не работают, какой бы
+строкой их ни подставляли в `LargeImageKey`.
 
-## Why an upload is needed
+## Как это работает
 
-The Discord client downloads the image on its own, so the plugin has to hand it a public
-https address. The embedded provider uses [litterbox](https://litterbox.catbox.moe), which
-needs **no api key, no account and no registration** - the upload is anonymous and the
-uploaded file is deleted automatically.
+1. Берётся `IAimpFileInfo.AlbumArt` — обложка из тегов файла (`APIC` в mp3, `PICTURE` в flac,
+   `covr` в m4a).
+2. Если картинка меньше `embeddedMinDimension` по обеим сторонам — она считается заглушкой,
+   обложки нет.
+3. Обложка масштабируется до `embeddedMaxDimension` и кодируется в JPEG.
+4. Загружается на `embeddedUploadEndpoint` (по умолчанию
+   [litterbox](https://litterbox.catbox.moe) — без ключа, без аккаунта, без регистрации).
+5. Полученный https-ссылка отдаётся в Discord. Результат кэшируется по имени и размеру
+   файла, так что при переключении треков обратно обложка не заливается заново.
 
-## Settings
+## Настройки
 
-All of them live in `%AppData%\BowieD_AIMPDiscordPresence2\config.xml`:
+Всё в `%AppData%\BowieD_AIMPDiscordPresence2\config.xml`:
 
-| Setting                   | Default                                                | Meaning                                                        |
-| ------------------------- | ------------------------------------------------------ | -------------------------------------------------------------- |
-| `albumArtProvider`        | `Embedded`                                             | `Embedded` for this provider                                    |
-| `embeddedUploadEndpoint`  | `https://litterbox.catbox.moe/resources/internals/api.php` | Where the cover is uploaded to                                  |
-| `embeddedUploadExpiry`    | `1h`                                                   | How long the uploaded cover lives (`1h`, `12h`, `24h`, `48h`, `72h`) |
-| `embeddedMaxDimension`    | `512`                                                  | Covers bigger than this are scaled down before uploading        |
-| `embeddedMinDimension`    | `100`                                                  | Covers smaller than this are treated as "no cover"              |
-| `embeddedInternetFallback`| `true`                                                 | If the file has no cover, look it up on MusicBrainz             |
-| `embeddedFallbackUserAgent` | `AIMP-Discord-Presence-2/0.0.3`                      | User agent used by the MusicBrainz fallback                      |
+| Параметр                   | По умолчанию                                          | Смысл                                                     |
+| -------------------------- | ------------------------------------------------------ | --------------------------------------------------------- |
+| `albumArtProvider`         | `Embedded`                                             | выбор этого провайдера                                    |
+| `embeddedUploadEndpoint`   | `https://litterbox.catbox.moe/resources/internals/api.php` | endpoint загрузки (litterbox-совместимый)                |
+| `embeddedUploadExpiry`     | `1h`                                                   | время жизни файла: `1h`, `12h`, `24h`, `48h`, `72h`        |
+| `embeddedMaxDimension`     | `512`                                                  | больше этого обложка ужимается                             |
+| `embeddedMinDimension`     | `100`                                                  | меньше этого — заглушка, обложка не ищется                 |
+| `embeddedInternetFallback` | `true`                                                 | нет обложки в файле — искать в MusicBrainz                  |
+| `embeddedFallbackUserAgent`| `AIMP-Discord-Presence-2/0.0.3`                        | User-Agent для запроса к MusicBrainz                        |
 
-Logs of every upload are written to
-`%AppData%\BowieD_AIMPDiscordPresence2\EmbeddedProvider\uploads.log`.
+Лог каждой загрузки: `%AppData%\BowieD_AIMPDiscordPresence2\EmbeddedProvider\uploads.log`.
+Большой лог — признак того, что endpoint недоступен из вашей сети.
 
-## Nothing embedded? (the mp3 case)
+## Обложки в mp3 обычно отсутствуют
 
-Almost every mp3 in the wild has **no** embedded cover - either no `APIC` frame at all, or a
-1x1 placeholder. Such covers are rejected by `embeddedMinDimension` and:
+В дикой природе mp3 почти всегда без обложек: либо кадра `APIC` нет, либо внутри заглушка
+1×1. Такие обложки отсекаются по `embeddedMinDimension`, и дальше:
 
-* if `embeddedInternetFallback` is `true` (default) the cover is looked up on MusicBrainz and
-  used directly, no upload involved;
-* if you want strictly local covers - set it to `false`, and embed the artwork into your files
-  once (for example with Mp3tag: select all tracks -> "Tag pictures" -> pick the folder with
-  the covers). Flac files with embedded pictures work without any fallback at all.
+- если `embeddedInternetFallback` = `true` (по умолчанию), обложка ищется в MusicBrainz и
+  используется напрямую, без загрузки;
+- если нужны строго локальные обложки — поставьте `false` и зашейте картинки в файлы один
+  раз. Например, Mp3tag: выделить треки → «Tag pictures» → указать папку с обложками.
+  В flac обложки обычно уже есть, и тогда всё работает без всякого фолбэка.
 
-Uploads are cached per track (file name + size), so switching back and forth between songs does
-not re-upload the same cover over and over.
+## Альтернативный endpoint
+
+`embeddedUploadEndpoint` должен принимать multipart POST с полями `reqtype=fileupload`,
+`time=<embeddedUploadExpiry>`, `fileToUpload=<файл>` и отдавать ссылку текстом или JSON с
+полем `url`/`link`. Такую же схему использует [catbox](https://catbox.moe), поэтому, если
+litterbox с вашей сети недоступен, можно указать адрес catbox: `https://catbox.moe/user/api.php`.
+
+Если MusicBrainz недоступен (бывает у части провайдеров), откат не сработает — это видно по
+пустому логу и дефолтной иконке AIMP.

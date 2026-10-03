@@ -1,39 +1,46 @@
-1. Download Album Cover Gatherer.
+# Discord
 
-2. Run it.
+Обложки заранее загружаются в приложение на Discord вручную. Подходит для небольшой
+фиксированной коллекции: в приложении 288 ассетов, и для каждого трека отдельная картинка
+не нужна — на альбом приходится один ключ.
 
-3. When prompted with `Directory >>`, input your music directory.
+Настройки в `%AppData%\BowieD_AIMPDiscordPresence2\config.xml`:
 
-4. When prompted with `Output Directory >>`, input some empty directory (or directory with previous output).
+| Параметр               | Смысл                                                        |
+| ---------------------- | ------------------------------------------------------------ |
+| `albumArtProvider`     | `Discord`, регистр важен                                     |
+| `discordApplicationId` | Application ID из Discord Developer Portal                   |
 
-5. Wait it to finish working.
+## Подготовка обложек
 
-6. Go on [Discord Developer Portal](https://discord.com/developers/applications).
+1. Собрать `AlbumCoverGatherer` (проект в этом репозитории).
+2. Запустить его, указать папку с музыкой на `Directory >>`.
+3. На `Output Directory >>` указать пустую папку.
+4. Дождаться окончания. Обложки меньше 512×512 будут увеличены, имена файлов — SHA1 от
+   названия альбома.
 
-7. Log in your Discord account.
+## Загрузка в Discord
 
-8. Press `New Application`, input `AIMP` or something else to your liking. This will dictate what other people on Discord will see next to "Listening to".
+1. Открыть [Discord Developer Portal](https://discord.com/developers/applications) под своим
+   аккаунтом.
+2. **New Application** — имя приложения это то, что увидят другие в строке «Слушает…».
+3. Загрузить иконку приложения.
+4. **Rich Presence → Art Assets → Add Image(s)** и выбрать собранные обложки.
+5. Загружать не переименовывая: плагин ищет ключи по этим именам.
+6. Дождаться загрузки — картинки появляются в Discord не сразу.
+7. Скопировать **Application Id** со вкладки General Information.
 
-9. Upload some icon that you will use for Rich Presence.
+## Как включить
 
-10. Go to Rich Presence > Art Assets.
+1. Полностью закрыть AIMP, включая трей.
+2. Открыть `%AppData%\BowieD_AIMPDiscordPresence2\config.xml` любым текстовым редактором.
+3. Провайдер: `<albumArtProvider>Discord</albumArtProvider>` — **регистр важен**.
+4. Заменить `<discordApplicationId>429559336982020107</discordApplicationId>` на
+   `<discordApplicationId>ВАШ_APPLICATION_ID</discordApplicationId>`.
+5. Запустить AIMP.
 
-11. Press "Add Image(s)", and select all images you have gathered by using the app.
+## Ограничения
 
-12. Upload them without changing their name (it's how plugin will find them).
-
-13. Wait for process to complete. After uploading it may take a while before they show up in Discord.
-
-14. Copy `Application Id`, displayed in `General Information` tab.
-
-15. Completely close AIMP, make sure it's not open in tray.
-
-16. Go to data folder of the plugin (you can use a shortcut in plugin folder, which can be found in `AIMP/Plugins/aimp_DiscordPresence2`).
-
-17. Open `config.xml` in any text editor.
-
-18. Change `albumArtProvider` to Discord, making it look like this - `<albumArtProvider>Discord</albumArtProvider>`. **Capitalization matters!**
-
-19. Change `<discordApplicationId>429559336982020107</discordApplicationId>` to `<discordApplicationId>YOUR APPLICATION ID</discordApplicationId>`, replacing `YOUR APPLICATION ID` with your newly obtained discord application id.
-
-20. Start AIMP, it should be working now.
+- 288 ассетов на всё приложение, персональных обложек у каждого трека нет.
+- Новое изображение может не появиться сразу — иногда до нескольких часов.
+- Пропуск обложки в приложении означает дефолтную иконку AIMP.
