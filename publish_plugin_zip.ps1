@@ -13,6 +13,7 @@ Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $files = @(
+	'aimp_DiscordPresence2.dll',
 	'AIMP-Discord-Presence-2.dll',
 	'AIMP.SDK.dll',
 	'aimp_dotnet.dll',
@@ -21,6 +22,16 @@ $files = @(
 )
 
 if (Test-Path $Output) { Remove-Item $Output -Force }
+
+# AIMP loads "aimp_DiscordPresence2.dll" as the module: aimp_dotnet.dll copied under the plugin name
+$module = Join-Path $Source 'aimp_DiscordPresence2.dll'
+if (-not (Test-Path $module)) {
+	$bridge = Join-Path $Source 'aimp_dotnet.dll'
+	if (Test-Path $bridge) {
+		Write-Host 'creating aimp_DiscordPresence2.dll from aimp_dotnet.dll'
+		Copy-Item $bridge $module
+	}
+}
 
 $stream = [System.IO.File]::Open($Output, [System.IO.FileMode]::CreateNew)
 $archive = New-Object System.IO.Compression.ZipArchive($stream, [System.IO.Compression.ZipArchiveMode]::Create)
